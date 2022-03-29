@@ -44,6 +44,9 @@ namespace HilbertCurve
             // Whether to include the filament change after the first layer
             const bool includeFilamentChange = true;
 
+            // Number of extra steps to take in the first layer if inluding a filament change
+            const int firstLayerExtraSteps = 3;
+
             // Starting position of the main Sierpinski Curve
             const double xCenter = 125.0;
             const double yCenter = 105.0;
@@ -222,6 +225,13 @@ namespace HilbertCurve
                 printHours++;
                 printMinutes -= 60;
             }
+
+            // Print the time until the filament change
+            double minutesUntilFilamentChange = (xCoords[0].Length + 1 / oneMinuteInSteps) // Print time for the first layer
+                + (preDistanceFirstLayer / printFeedRate) // Add time to draw border pattern
+                + introLineMinutes // add time for drawing of the intro line
+                + homeAndCalibrateMinutes; // add time for homing and calibrating
+            Console.WriteLine("Minutes until filament change: " + minutesUntilFilamentChange.ToString());
 
             #endregion Determine total print time
 
@@ -421,19 +431,39 @@ namespace HilbertCurve
 
                     if (includeFilamentChange && layerNumber == 0)
                     {
-                        distanceTraveled = Math.Sqrt(Math.Pow(xCenter + xCoordsCurve[0] - prevX, 2) + Math.Pow(yCenter + yCoordsCurve[0] - prevY, 2));
+                        for (int i = 0; i < firstLayerExtraSteps; i++)
+                        {
+                            distanceTraveled = Math.Sqrt(Math.Pow(xCenter + xCoordsCurve[i] - prevX, 2) + Math.Pow(yCenter + yCoordsCurve[i] - prevY, 2));
 
-                        // Extrude 1 step to the starting vertex of layer 0
-                        sw.WriteLine("G1 X" +
-                            string.Format("{0,1:F3}", Math.Round(xCenter + xCoordsCurve[0], 3)) +
-                            " Y" +
-                            string.Format("{0,1:F3}", Math.Round(yCenter + yCoordsCurve[0], 3)) +
-                            " E" +
-                            string.Format("{0,1:F5}", Math.Round(extrusionRate * distanceTraveled, 5)));
+                            // Extrude 1 step to the starting vertex of layer 0
+                            sw.WriteLine("G1 X" +
+                                string.Format("{0,1:F3}", Math.Round(xCenter + xCoordsCurve[i], 3)) +
+                                " Y" +
+                                string.Format("{0,1:F3}", Math.Round(yCenter + yCoordsCurve[i], 3)) +
+                                " E" +
+                                string.Format("{0,1:F5}", Math.Round(extrusionRate * distanceTraveled, 5)));
+                            // Record the previous position
+                            prevX = xCenter + xCoordsCurve[i];
+                            prevY = yCenter + yCoordsCurve[i];
+                        }
 
-                        // Raise Z by 10mm and retract the filament
+                        // Raise Z to second layer
+                        sw.WriteLine("G1 Z" + string.Format("{0,1:F3}", Math.Round(2 * layerHeight, 3)));
+
+                        // Do wipe move thingy while retracting filament -0.8 units total
+                        sw.WriteLine("; retracting extruder");
+                        sw.WriteLine("G1 F8640;_WIPE");
+                        sw.WriteLine("G1 X" + (prevX - 0.603).ToString() + " Y" + (prevY - 0.603).ToString() + " E-0.19691");
+                        sw.WriteLine("G1 F8640;_WIPE");
+                        sw.WriteLine("G1 X" + (prevX - 1.143).ToString() + " Y" + (prevY - 0.603).ToString() + " E-0.12474");
+                        sw.WriteLine("G1 F8640;_WIPE");
+                        sw.WriteLine("G1 X" + (prevX - 0.17).ToString() + " Y" + (prevY + 0.37).ToString() + " E-0.31790");
+                        sw.WriteLine("G1 F8640;_WIPE");
+                        sw.WriteLine("G1 X" + (prevX - 0.17).ToString() + " Y" + (prevY + 0.892).ToString() + " E-0.12046");
+                        sw.WriteLine("G1 E-0.04000 F2100.00000");
+
+                        // Raise Z to 10mm
                         sw.WriteLine("G1 Z" + string.Format("{0,1:F3}", Math.Round(10.0, 3)));
-                        sw.WriteLine("G1 E-0.80000 F2100.00000; retract filament");
 
                         // Update progress display
                         minutesElapsed = homeAndCalibrateMinutes + introLineMinutes + (preDistanceFirstLayer / printFeedRate) + (step / oneMinuteInSteps)
@@ -490,7 +520,7 @@ namespace HilbertCurve
                 sw.WriteLine("M104 S0 ; turn off temperature");
                 sw.WriteLine("M140 S0 ; turn off heatbed");
                 sw.WriteLine("M107 ; turn off fan");
-                sw.WriteLine("G1 Z30.8 ; Move print head up");
+                sw.WriteLine("G1 Z210 ; Move print head up to the top");
                 sw.WriteLine("G1 X0 Y200; home X axis");
                 sw.WriteLine("M84 ; disable motors");
             }
