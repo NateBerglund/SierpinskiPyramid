@@ -45,11 +45,14 @@ namespace HilbertCurve
             const double xCenter = 125.0;
             const double yCenter = 105.0;
 
-            const double stepsPerSecond = 56.46; // "Steps" here means steps of the Sierpinski Curve. Note: if gridStep changes, this will also change
+            const double stepsPerSecond = 58.69; // "Steps" here means steps of the Sierpinski Curve. Note: if gridStep changes, this will also change
             const double oneMinuteInSteps = 60 * stepsPerSecond; // For convenience, stores the equivalent number of 'steps' for one minute's worth of time
 
+            // Minutes to home and calibrate
+            const double homeAndCalibrateMinutes = 0.5;
+
             // Minutes to draw the intro line
-            const double introLineMinutes = 1.0;
+            const double introLineMinutes = 0.12;
 
             // Border padding in mm
             const double borderPadding = 5.0;
@@ -201,11 +204,12 @@ namespace HilbertCurve
 
             #region Determine total print time
 
-            double preDistanceFirstLayer = 4.5 * (sideLen * gridStep + 2 * borderPadding);
+            double preDistanceFirstLayer = 4 * (sideLen * gridStep + 2 * borderPadding);
 
-            double totalMinutes = sierpinskiPrintTimeInMinutes + // Print time for the Hilbert Curve
-                preDistanceFirstLayer / printFeedRate + // Add time to draw border pattern
-                2 * introLineMinutes; // add time for each drawing of the intro lines
+            double totalMinutes = sierpinskiPrintTimeInMinutes // Print time for the Hilbert Curve
+                + (preDistanceFirstLayer / printFeedRate) // Add time to draw border pattern
+                + introLineMinutes // add time for drawing of the intro line
+                + homeAndCalibrateMinutes; // add time for homing and calibrating
 
             int printMinutes = (int)Math.Round(totalMinutes);
             int printHours = 0;
@@ -244,14 +248,26 @@ namespace HilbertCurve
                 sw.WriteLine("M140 S60 ; set bed temp");
                 sw.WriteLine("M190 S60 ; wait for bed temp");
                 sw.WriteLine("M109 S215 ; wait for extruder temp");
+                sw.WriteLine("M73 Q0 S" + ((int)Math.Round(totalMinutes)).ToString() + " ; updating progress display (0% done, " + ((int)Math.Round(totalMinutes)).ToString() + " minutes remaining)");
+                sw.WriteLine("M73 P0 R" + ((int)Math.Round(totalMinutes)).ToString() + " ; updating progress display (0% done, " + ((int)Math.Round(totalMinutes)).ToString() + " minutes remaining)");
                 sw.WriteLine("G28 W ; home all without mesh bed level");
                 sw.WriteLine("G80 ; mesh bed leveling");
+                double minutesElapsed = homeAndCalibrateMinutes;
+                int minutesRemaining = (int)Math.Round(totalMinutes - minutesElapsed);
+                int pctDone = (int)Math.Round(100 * minutesElapsed / totalMinutes);
+                sw.WriteLine("M73 Q" + pctDone.ToString() + " S" + minutesRemaining.ToString() + " ; updating progress display (" + pctDone.ToString() + "% done, " + minutesRemaining.ToString() + " minutes remaining)");
+                sw.WriteLine("M73 P" + pctDone.ToString() + " R" + minutesRemaining.ToString() + " ; updating progress display (" + pctDone.ToString() + "% done, " + minutesRemaining.ToString() + " minutes remaining)");
                 sw.WriteLine("G1 Y-3.0 F1000.0 ; go outside print area");
                 sw.WriteLine("G92 E0.0");
                 sw.WriteLine("G1 X60.0 E9.0  F1000.0 ; intro line");
                 sw.WriteLine("M73 Q0 S" + ((int)Math.Round(totalMinutes)).ToString() + " ; updating progress display (0% done, " + ((int)Math.Round(totalMinutes)).ToString() + " minutes remaining)");
                 sw.WriteLine("M73 P0 R" + ((int)Math.Round(totalMinutes)).ToString() + " ; updating progress display (0% done, " + ((int)Math.Round(totalMinutes)).ToString() + " minutes remaining)");
                 sw.WriteLine("G1 X100.0 E12.5  F1000.0 ; intro line");
+                minutesElapsed = homeAndCalibrateMinutes + introLineMinutes;
+                minutesRemaining = (int)Math.Round(totalMinutes - minutesElapsed);
+                pctDone = (int)Math.Round(100 * minutesElapsed / totalMinutes);
+                sw.WriteLine("M73 Q" + pctDone.ToString() + " S" + minutesRemaining.ToString() + " ; updating progress display (" + pctDone.ToString() + "% done, " + minutesRemaining.ToString() + " minutes remaining)");
+                sw.WriteLine("M73 P" + pctDone.ToString() + " R" + minutesRemaining.ToString() + " ; updating progress display (" + pctDone.ToString() + "% done, " + minutesRemaining.ToString() + " minutes remaining)");
                 sw.WriteLine("G92 E0.0");
                 sw.WriteLine("M221 S95");
                 sw.WriteLine("M900 K30; Filament gcode");
@@ -276,11 +292,6 @@ namespace HilbertCurve
                 sw.WriteLine("G1 E0.80000 F2100.00000 ; ready filament");
                 sw.WriteLine("M204 S1000");
                 sw.WriteLine("G1 F" + string.Format("{0,1:F3}", printFeedRate) + " ; restore feed rate to that used for printing (not sure but I think the units on this are millimeters per minute)");
-                double minutesElapsed = introLineMinutes;
-                int minutesRemaining = (int)Math.Round(totalMinutes - minutesElapsed);
-                int pctDone = (int)Math.Round(100 * minutesElapsed / totalMinutes);
-                sw.WriteLine("M73 Q" + pctDone.ToString() + " S" + minutesRemaining.ToString() + " ; updating progress display (" + pctDone.ToString() + "% done, " + minutesRemaining.ToString() + " minutes remaining)");
-                sw.WriteLine("M73 P" + pctDone.ToString() + " R" + minutesRemaining.ToString() + " ; updating progress display (" + pctDone.ToString() + "% done, " + minutesRemaining.ToString() + " minutes remaining)");
                 sw.WriteLine("");
 
                 sw.WriteLine("; Draw border");
@@ -317,9 +328,11 @@ namespace HilbertCurve
                 sw.WriteLine("G1 E-0.80000 F2100.00000 ; retract filament");
                 sw.WriteLine("G1 Z0.600 F10800.000 ; lift tip up");
 
-                yMM = Math.Round(yCenter, 3); // Move y to the center
+                // Move to the first point of the pattern
+                xMM = Math.Round(xCenter + xCoords[0][0], 3);
+                yMM = Math.Round(yCenter + yCoords[0][0], 3);
                 distanceTraveled = Math.Sqrt(Math.Pow(xMM - xMMPrev, 2) + Math.Pow(yMM - yMMPrev, 2));
-                sw.WriteLine("G1 X" + string.Format("{0,1:F3}", xMM) + " Y" + string.Format("{0,1:F3}", yMM) + " E" + string.Format("{0,1:F5}", Math.Round(extrusionRate * distanceTraveled, 5)));
+                sw.WriteLine("G1 X" + string.Format("{0,1:F3}", xMM) + " Y" + string.Format("{0,1:F3}", yMM));
 
                 sw.WriteLine("G1 Z" + string.Format("{0,1:F3}", Math.Round(layerHeight, 3)) + " ; bring tip back down to first layer");
                 sw.WriteLine("G1 E0.80000 F2100.00000 ; ready filament");
@@ -327,7 +340,7 @@ namespace HilbertCurve
                 sw.WriteLine("G1 F" + string.Format("{0,1:F3}", printFeedRate) + " ; restore feed rate to that used for printing (not sure but I think the units on this are millimeters per minute)");
 
                 // Update progress display
-                minutesElapsed = introLineMinutes + preDistanceFirstLayer / printFeedRate;
+                minutesElapsed = homeAndCalibrateMinutes + introLineMinutes + (preDistanceFirstLayer / printFeedRate);
                 minutesRemaining = (int)Math.Round(totalMinutes - minutesElapsed);
                 pctDone = (int)Math.Round(100 * minutesElapsed / totalMinutes);
                 sw.WriteLine("M73 Q" + pctDone.ToString() + " S" + minutesRemaining.ToString() + " ; updating progress display (" + pctDone.ToString() + "% done, " + minutesRemaining.ToString() + " minutes remaining)");
@@ -340,14 +353,11 @@ namespace HilbertCurve
 
                 #endregion Initial G-Code
 
-                int patternEndX = 0;
-                int patternEndY = 0;
                 int step = 0;
                 minutesRemaining = (int)Math.Round(sierpinskiPrintTimeInMinutes);
                 int percentDone = 0;
-
-                double prevX = xCenter;
-                double prevY = yCenter;
+                double prevX = xMM;
+                double prevY = yMM;
                 for (int layerNumber = 0; layerNumber < nLayers; layerNumber++)
                 {
                     if (layerNumber > 0)
@@ -360,6 +370,11 @@ namespace HilbertCurve
                     int nPtsCurve = xCoordsCurve.Length;
                     for (int vIdx = 0; vIdx < nPtsCurve; vIdx++)
                     {
+                        if (layerNumber == 0 && vIdx == 0) // Skip moving to the first vertex, since we're already there
+                        {
+                            continue;
+                        }
+
                         // Are we at the first vertex of a new layer?
                         if (layerNumber > 0 && vIdx == 0)
                         {
@@ -382,7 +397,7 @@ namespace HilbertCurve
                         step++;
 
                         // Update progress display, if needed
-                        minutesElapsed = introLineMinutes + preDistanceFirstLayer / printFeedRate + step / oneMinuteInSteps;
+                        minutesElapsed = homeAndCalibrateMinutes + introLineMinutes + (preDistanceFirstLayer / printFeedRate) + (step / oneMinuteInSteps);
                         int nextMinutesRemaining = (int)Math.Round(totalMinutes - minutesElapsed);
                         int nextPercentDone = (int)Math.Round(100 * minutesElapsed / totalMinutes);
                         if (nextMinutesRemaining != minutesRemaining || nextPercentDone != percentDone)
