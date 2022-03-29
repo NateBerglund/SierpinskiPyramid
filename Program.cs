@@ -227,7 +227,7 @@ namespace HilbertCurve
             }
 
             // Print the time until the filament change
-            double minutesUntilFilamentChange = (xCoords[0].Length + 1 / oneMinuteInSteps) // Print time for the first layer
+            double minutesUntilFilamentChange = ((xCoords[0].Length + 1) / oneMinuteInSteps) // Print time for the first layer
                 + (preDistanceFirstLayer / printFeedRate) // Add time to draw border pattern
                 + introLineMinutes // add time for drawing of the intro line
                 + homeAndCalibrateMinutes; // add time for homing and calibrating
