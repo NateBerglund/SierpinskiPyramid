@@ -51,7 +51,7 @@ namespace HilbertCurve
             const double xCenter = 125.0;
             const double yCenter = 105.0;
 
-            const double stepsPerSecond = 58.69; // "Steps" here means steps of the Sierpinski Curve. Note: if gridStep changes, this will also change
+            const double stepsPerSecond = 58.23; // "Steps" here means steps of the Sierpinski Curve. Note: if gridStep changes, this will also change
             const double oneMinuteInSteps = 60 * stepsPerSecond; // For convenience, stores the equivalent number of 'steps' for one minute's worth of time
 
             // Minutes to home and calibrate
@@ -232,6 +232,11 @@ namespace HilbertCurve
                 + introLineMinutes // add time for drawing of the intro line
                 + homeAndCalibrateMinutes; // add time for homing and calibrating
             Console.WriteLine("Minutes until filament change: " + minutesUntilFilamentChange.ToString());
+
+            // Print other time estimates
+            Console.WriteLine("Setup minutes: " + (totalMinutes - sierpinskiPrintTimeInMinutes).ToString());
+            Console.WriteLine("Sierpinski print minutes: " + sierpinskiPrintTimeInMinutes.ToString());
+            Console.WriteLine("Total minutes: " + totalMinutes.ToString());
 
             #endregion Determine total print time
 
@@ -414,8 +419,8 @@ namespace HilbertCurve
                         // Update progress display, if needed
                         minutesElapsed = homeAndCalibrateMinutes + introLineMinutes + (preDistanceFirstLayer / printFeedRate) + (step / oneMinuteInSteps)
                             + (includeFilamentChange && layerNumber > 0 ? introLineMinutes : 0);
-                        int nextMinutesRemaining = (int)Math.Round(totalMinutes - minutesElapsed);
-                        int nextPercentDone = (int)Math.Round(100 * minutesElapsed / totalMinutes);
+                        int nextMinutesRemaining = Math.Max(1, (int)Math.Round(totalMinutes - minutesElapsed));
+                        int nextPercentDone = Math.Min(99, (int)Math.Round(100 * minutesElapsed / totalMinutes));
                         if (nextMinutesRemaining != minutesRemaining || nextPercentDone != percentDone)
                         {
                             minutesRemaining = nextMinutesRemaining;
