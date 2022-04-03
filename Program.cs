@@ -44,6 +44,10 @@ namespace HilbertCurve
             // Whether to include the filament change after the first layer
             const bool includeFilamentChange = true;
 
+            // Whether to include the "ears" at the base for connecting to a larger superstructure
+            const bool includeEarsAtBase = false;
+            const int exponentEars = 4; // Power of 2 for which we are generating the "ears"
+
             // Number of extra steps to take in the first layer if inluding a filament change
             const int firstLayerExtraSteps = 3;
 
@@ -75,6 +79,57 @@ namespace HilbertCurve
 
             const int exponent = 7; // Power of 2 for which we are generating a sierpinski pyramid
             GenerateSierpinskiPyramid(exponent, out List<double[]> xCoords, out List<double[]> yCoords, out List<int> layerIndexOffsets, out int sideLen);
+
+            int nLayers = xCoords.Count;
+
+            if (includeEarsAtBase)
+            {
+                double offset = (1 << exponent) * 0.5 * gridStep;
+                int numLayersEars = PreComputedSierpinskiPyramids[exponentEars].Item1.Count;
+                for (int layerNumber = 0; layerNumber < numLayersEars; layerNumber++)
+                {
+                    int nMainCurvePts = xCoords[layerNumber].Length;
+                   
+                    double[] xCoordsEar = PreComputedSierpinskiPyramids[exponentEars].Item1[numLayersEars - 1 - layerNumber];
+                    double[] yCoordsEar = PreComputedSierpinskiPyramids[exponentEars].Item2[numLayersEars - 1 - layerNumber];
+                    int earLayerOffset = PreComputedSierpinskiPyramidLayerIndexOffsets[exponentEars][numLayersEars - 1 - layerNumber];
+                    int nEarCurvePts = xCoordsEar.Length;
+                    CircShift(xCoordsEar, yCoordsEar, earLayerOffset);
+
+                    double[] xCoordsLayer = new double[nMainCurvePts + 4 * nEarCurvePts];
+                    double[] yCoordsLayer = new double[nMainCurvePts + 4 * nEarCurvePts];
+
+                    Array.Copy(xCoords[layerNumber], xCoordsLayer, nMainCurvePts/ 8 + 1);
+                    Array.Copy(yCoords[layerNumber], yCoordsLayer, nMainCurvePts/ 8 + 1);
+
+                    CopyWithOffset(xCoordsEar, yCoordsEar, 0, xCoordsLayer, yCoordsLayer,
+                        nMainCurvePts/ 8 + 1, nEarCurvePts, -offset, -offset);
+
+                    Array.Copy(xCoords[layerNumber], nMainCurvePts/ 8 + 1, xCoordsLayer, nMainCurvePts/ 8 + 1 + nEarCurvePts, nMainCurvePts / 4);
+                    Array.Copy(yCoords[layerNumber], nMainCurvePts/ 8 + 1, yCoordsLayer, nMainCurvePts/ 8 + 1 + nEarCurvePts, nMainCurvePts / 4);
+
+                    CopyWithRotationAndOffset(xCoordsEar, yCoordsEar, 0, xCoordsLayer, yCoordsLayer,
+                        3 * nMainCurvePts/ 8 + 1 + nEarCurvePts, nEarCurvePts, offset, -offset, 1);
+
+                    Array.Copy(xCoords[layerNumber], 3 * nMainCurvePts/ 8 + 1, xCoordsLayer, 3 * nMainCurvePts/ 8 + 1 + 2 * nEarCurvePts, nMainCurvePts / 4);
+                    Array.Copy(yCoords[layerNumber], 3 * nMainCurvePts/ 8 + 1, yCoordsLayer, 3 * nMainCurvePts/ 8 + 1 + 2 * nEarCurvePts, nMainCurvePts / 4);
+
+                    CopyWithRotationAndOffset(xCoordsEar, yCoordsEar, 0, xCoordsLayer, yCoordsLayer,
+                        5 * nMainCurvePts/ 8 + 1 + 2 * nEarCurvePts, nEarCurvePts, offset, offset, 2);
+
+                    Array.Copy(xCoords[layerNumber], 5 * nMainCurvePts/ 8 + 1, xCoordsLayer, 5 * nMainCurvePts/ 8 + 1 + 3 * nEarCurvePts, nMainCurvePts / 4);
+                    Array.Copy(yCoords[layerNumber], 5 * nMainCurvePts/ 8 + 1, yCoordsLayer, 5 * nMainCurvePts/ 8 + 1 + 3 * nEarCurvePts, nMainCurvePts / 4);
+
+                    CopyWithRotationAndOffset(xCoordsEar, yCoordsEar, 0, xCoordsLayer, yCoordsLayer,
+                        7 * nMainCurvePts/ 8 + 1 + 3 * nEarCurvePts, nEarCurvePts, -offset, offset, 3);
+
+                    Array.Copy(xCoords[layerNumber], 7 * nMainCurvePts/ 8 + 1, xCoordsLayer, 7 * nMainCurvePts/ 8 + 1 + 4 * nEarCurvePts, nMainCurvePts/ 8 - 1);
+                    Array.Copy(yCoords[layerNumber], 7 * nMainCurvePts/ 8 + 1, yCoordsLayer, 7 * nMainCurvePts/ 8 + 1 + 4 * nEarCurvePts, nMainCurvePts/ 8 - 1);
+
+                    xCoords[layerNumber] = xCoordsLayer;
+                    yCoords[layerNumber] = yCoordsLayer;
+                }
+            }
 
             #region Matlab Visualization
 
@@ -108,15 +163,13 @@ namespace HilbertCurve
             outputMPath = Path.Combine(outputFolder, outputMFilename);
             using (StreamWriter sw = new StreamWriter(outputMPath, false))
             {
-                int nLayersLastPyramid = PreComputedSierpinskiPyramids[exponent].Item1.Count;
-
                 sw.WriteLine("close all");
                 sw.WriteLine("clear all");
                 sw.WriteLine("clc");
                 sw.Write("xCoords = [");
-                for (int layerNumber = 0; layerNumber < nLayersLastPyramid; layerNumber++)
+                for (int layerNumber = 0; layerNumber < nLayers; layerNumber++)
                 {
-                    double[] xCoordsCurve = PreComputedSierpinskiPyramids[exponent].Item1[layerNumber];
+                    double[] xCoordsCurve = xCoords[layerNumber];
                     int nPtsCurve = xCoordsCurve.Length;
 
                     for (int i = 0; i < nPtsCurve; i++)
@@ -126,9 +179,9 @@ namespace HilbertCurve
                 }
                 sw.WriteLine("];");
                 sw.Write("yCoords = [");
-                for (int layerNumber = 0; layerNumber < nLayersLastPyramid; layerNumber++)
+                for (int layerNumber = 0; layerNumber < nLayers; layerNumber++)
                 {
-                    double[] yCoordsCurve = PreComputedSierpinskiPyramids[exponent].Item2[layerNumber];
+                    double[] yCoordsCurve = yCoords[layerNumber];
                     int nPtsCurve = yCoordsCurve.Length;
 
                     for (int i = 0; i < nPtsCurve; i++)
@@ -138,9 +191,9 @@ namespace HilbertCurve
                 }
                 sw.WriteLine("];");
                 sw.Write("zCoords = [");
-                for (int layerNumber = 0; layerNumber < nLayersLastPyramid; layerNumber++)
+                for (int layerNumber = 0; layerNumber < nLayers; layerNumber++)
                 {
-                    int nPtsCurve = PreComputedSierpinskiPyramids[exponent].Item1[layerNumber].Length;
+                    int nPtsCurve = xCoords[layerNumber].Length;
 
                     for (int i = 0; i < nPtsCurve; i++)
                     {
@@ -157,14 +210,12 @@ namespace HilbertCurve
             outputMPath = Path.Combine(outputFolder, outputMFilename);
             using (StreamWriter sw = new StreamWriter(outputMPath, false))
             {
-                int nLayersLastPyramid = PreComputedSierpinskiPyramids[exponent].Item1.Count;
-
                 sw.WriteLine("close all");
                 sw.WriteLine("clear all");
                 sw.WriteLine("clc");
                 sw.Write("xCoords = [");
 
-                double[] xCoordsCurve = PreComputedSierpinskiPyramids[exponent].Item1[layerNumberToPlot];
+                double[] xCoordsCurve = xCoords[layerNumberToPlot];
                 int nPtsCurve = xCoordsCurve.Length;
 
                 for (int i = 0; i < nPtsCurve; i++)
@@ -175,7 +226,7 @@ namespace HilbertCurve
                 sw.WriteLine("];");
                 sw.Write("yCoords = [");
 
-                double[] yCoordsCurve = PreComputedSierpinskiPyramids[exponent].Item2[layerNumberToPlot];
+                double[] yCoordsCurve = yCoords[layerNumberToPlot];
 
                 for (int i = 0; i < nPtsCurve; i++)
                 {
@@ -197,7 +248,6 @@ namespace HilbertCurve
             string layerHeightText = string.Format("{0,1:F1}mm", layerHeight); // as it will appear in the filename
 
             // Total number of Sierpinski curve steps taken
-            int nLayers = xCoords.Count;
             int totalSierpinskiSteps = 0;
             for (int i = 0; i < nLayers; i++)
             {
@@ -467,8 +517,8 @@ namespace HilbertCurve
                         sw.WriteLine("G1 X" + (prevX - 0.17).ToString() + " Y" + (prevY + 0.892).ToString() + " E-0.12046");
                         sw.WriteLine("G1 E-0.04000 F2100.00000");
 
-                        // Raise Z to 10mm
-                        sw.WriteLine("G1 Z" + string.Format("{0,1:F3}", Math.Round(10.0, 3)));
+                        // Move to filament change position
+                        sw.WriteLine("G1 X250 Y0 Z210 ; move to filament change position");
 
                         // Update progress display
                         minutesElapsed = homeAndCalibrateMinutes + introLineMinutes + (preDistanceFirstLayer / printFeedRate) + (step / oneMinuteInSteps)
